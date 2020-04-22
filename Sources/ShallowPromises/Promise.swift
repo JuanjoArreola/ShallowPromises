@@ -7,7 +7,7 @@
 
 import Foundation
 
-private let syncQueue: DispatchQueue = DispatchQueue(label: "com.shallowpromises.SyncQueue", attributes: [])
+private let syncQueue = DispatchQueue(label: "com.shallowpromises.SyncQueue", attributes: [])
 
 open class Promise<U>: Cancellable {
     
@@ -15,7 +15,6 @@ open class Promise<U>: Cancellable {
     private var error: Error?
     
     private var futures: Futures<U>? = Futures<U>()
-    private var completionQueue: DispatchQueue?
     
     public var littlePromise: Cancellable? {
         didSet {
@@ -25,18 +24,10 @@ open class Promise<U>: Cancellable {
         }
     }
     
-    public var isCompleted: Bool {
-        return result != nil || error != nil
-    }
-    
-    public init(successClosure: ((U) -> Void)? = nil, completionQueue queue: DispatchQueue? = nil) {
+    public init(successClosure: ((U) -> Void)? = nil, queue: DispatchQueue? = nil, littlePromise: Cancellable? = nil) {
         if let closure = successClosure {
             futures?.appendSuccess(closure, in: queue)
         }
-        completionQueue = queue
-    }
-    
-    public init(littlePromise: Cancellable) {
         self.littlePromise = littlePromise
     }
     
@@ -47,7 +38,7 @@ open class Promise<U>: Cancellable {
     
     private func setResult(_ result: U?, error: Error?) -> Futures<U>? {
         syncQueue.sync {
-            if isCompleted {
+            if self.result != nil || self.error != nil {
                 return nil
             }
             self.result = result
@@ -63,7 +54,7 @@ open class Promise<U>: Cancellable {
     }
     
     public func complete(with error: Error, in queue: DispatchQueue? = nil) {
-        setResult(nil, error: error)?.complete(with: error, in: completionQueue ?? queue)
+        setResult(nil, error: error)?.complete(with: error, in: queue)
     }
     
     private func getResultOrRegisterThen<V>(_ next: @escaping (U) -> Promise<V>, in queue: DispatchQueue? = nil) -> Any {
@@ -125,11 +116,10 @@ open class Promise<U>: Cancellable {
         guard let result = getResultOrRegister(closure, in: queue) else {
             return self
         }
-        if let queue = queue {
-            queue.async { closure(result) }
-        } else {
+        queue?.async {
             closure(result)
-        }
+        } ?? closure(result)
+        
         return self
     }
     
@@ -149,17 +139,16 @@ open class Promise<U>: Cancellable {
         guard let error = getErrorOrRegister(closure, in: queue) else {
             return self
         }
-        if let queue = queue {
-            queue.async { closure(error) }
-        } else {
+        queue?.async {
             closure(error)
-        }
+        } ?? closure(error)
+        
         return self
     }
     
     private func isCompletedOrRegister(_ closure: @escaping () -> Void, in queue: DispatchQueue? = nil) -> Bool {
         syncQueue.sync {
-            if isCompleted {
+            if result != nil || error != nil {
                 return true
             } else {
                 futures?.appendFinally(closure, in: queue)
@@ -173,11 +162,10 @@ open class Promise<U>: Cancellable {
         if !isCompletedOrRegister(closure, in: queue) {
             return self
         }
-        if let queue = queue {
-            queue.async { closure() }
-        } else {
+        queue?.async {
             closure()
-        }
+        } ?? closure()
+    
         return self
     }
     

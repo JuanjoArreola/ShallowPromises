@@ -29,13 +29,13 @@ Typically the *Promiser* creates a Promise in a determined *Queue* and returns i
 the *Receiver*:
 
 ```swift
-    func requestUser() -> Promise<User> {
-        let promise = Promise<User>()
-        networkingQueue.async {
-            // make HTTP request to get the user
-        }
-        return promise
+func requestUser() -> Promise<User> {
+    let promise = Promise<User>()
+    networkingQueue.async {
+        // make HTTP request to get the user
     }
+    return promise
+}
 ```
 
 ### Fulfilling Promises
@@ -44,12 +44,12 @@ Some time in the future the *Promiser* fulfills the promise on a determined *Que
 *Receiver* uses the result.
 
 ```swift
-    do {
-        let result = try JSONDecoder().decode(User.self, from: data)
-        promise.fulfill(with: result, in: responseQueue)
-    } catch {
-        promise.complete(with: error, in: responseQueue)
-    }
+do {
+    let result = try JSONDecoder().decode(User.self, from: data)
+    promise.fulfill(with: result, in: responseQueue)
+} catch {
+    promise.complete(with: error, in: responseQueue)
+}
 ```
 
 ### How the *Receiver* uses the Promise
@@ -58,11 +58,11 @@ The *Receiver* of the *Promise* adds the necessary closures to it, there are fou
 closures that can be added the the *Promise*: `then` `onSuccess` `onError` and `finally`:
 
 ```swift
-    requestUser()
-        .then(requestFavorites(of:))
-        .onSuccess(updateFavorites)
-        .onError(logError)
-        .finally(updateView)
+requestUser()
+    .then(requestFavorites(of:))
+    .onSuccess(updateFavorites)
+    .onError(logError)
+    .finally(updateView)
 ```
         
 More than one closure can be added to every *Promise*.
@@ -74,21 +74,58 @@ will be called with the result of the previous promise once completed and will r
 promise:
 
 ```swift
-     requestInt(from: "1")
-        .then(requestString(from:))
-        .then(requestInt(from:))
-        .then(requestString(from:))
-        .onSuccess { result in
-        print(result)
-     }
+ requestInt(from: "1")
+    .then(requestString(from:))
+    .then(requestInt(from:))
+    .then(requestString(from:))
+    .onSuccess { result in
+    print(result)
+ }
 ```
-     
+ 
+### Closures and *Queues*
+
+The *Queue* in which the `then`,  `onSuccess`,  `onError` or `finally` closures are called is 
+determined by the following rules:
+
+1. If the closure is registered with a specific queue, then the closure will be called in that queue:
+
+```swift
+requestInt(from: "1").onSuccess(in: .main) { result in
+    print("in main queue: \(result)")
+}
+```
+If a queue is not specified:
+
+```swift
+    requestInt(from: "1").onSuccess { result in
+print("\(result)")
+}
+```
+then:
+
+2. If the *Promiser* specifies a closure when fulfilling the promise, then the closure will be 
+called in that queue:
+
+```swift
+promise.fulfill(with: result, in: .global())
+```
+
+If a queue is not specified:
+
+```swift
+promise.fulfill(with: result)
+```
+then:
+
+3. The closure is called in the current queue in which the `fulfill` method is called. 
+ 
 ### Cancelling Promises
 
 A promise can be cancelled by the *Receiver* by calling it's `cancel` method,  in which case 
-the `onError` closures will be called with the `` error:
+the `onError` closures will be called with the `PromiseFailure.cancelled` error:
 
 ```swift
-    let promise = requestUser().onError(logError)
-    promise.cancel()
+let promise = requestUser().onError(logError)
+promise.cancel()
 ```
