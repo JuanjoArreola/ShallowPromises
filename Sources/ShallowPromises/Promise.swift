@@ -45,27 +45,12 @@ open class Promise<U>: Cancellable {
         self.error = error
     }
     
-    private func setResult(_ result: U) -> Futures<U>? {
+    private func setResult(_ result: U?, error: Error?) -> Futures<U>? {
         syncQueue.sync {
             if isCompleted {
                 return nil
             }
             self.result = result
-            let lastFutures = futures
-            futures = nil
-            return lastFutures
-        }
-    }
-    
-    public func fulfill(with result: U, in queue: DispatchQueue? = nil) {
-        setResult(result)?.fulfill(with: result, in: queue)
-    }
-    
-    private func setError(_ error: Error) -> Futures<U>? {
-        syncQueue.sync {
-            if isCompleted {
-                return nil
-            }
             self.error = error
             let lastFutures = futures
             futures = nil
@@ -73,8 +58,12 @@ open class Promise<U>: Cancellable {
         }
     }
     
+    public func fulfill(with result: U, in queue: DispatchQueue? = nil) {
+        setResult(result, error: nil)?.fulfill(with: result, in: queue)
+    }
+    
     public func complete(with error: Error, in queue: DispatchQueue? = nil) {
-        setError(error)?.complete(with: error, in: completionQueue ?? queue)
+        setResult(nil, error: error)?.complete(with: error, in: completionQueue ?? queue)
     }
     
     private func getResultOrRegisterThen<V>(_ next: @escaping (U) -> Promise<V>, in queue: DispatchQueue? = nil) -> Any {
@@ -84,22 +73,27 @@ open class Promise<U>: Cancellable {
             } else if let error = error {
                 return error
             } else {
-                let promise = Promise<V>(littlePromise: self)
-                futures?.appendSuccess({ result in
-                    let originalPromise = next(result)
-                    originalPromise.onSuccess { nextResult in
-                        promise.fulfill(with: nextResult)
-                    }
-                    originalPromise.onError { nextError in
-                        promise.complete(with: nextError)
-                    }
-                }, in: queue)
-                futures?.appendError({ error in
-                    promise.complete(with: error)
-                }, in: queue)
-                return promise
+                return registerNext(next, in: queue)
             }
         }
+    }
+    
+    private func registerNext<V>(_ next: @escaping (U) -> Promise<V>, in queue: DispatchQueue?) -> Promise<V> {
+        let promise = Promise<V>(littlePromise: self)
+        futures?.appendSuccess({ result in
+            let originalPromise = next(result)
+            originalPromise.onSuccess { nextResult in
+                promise.fulfill(with: nextResult)
+            }
+            originalPromise.onError { nextError in
+                promise.complete(with: nextError)
+            }
+        }, in: queue)
+        futures?.appendError({ error in
+            promise.complete(with: error)
+        }, in: queue)
+        
+        return promise
     }
     
     public func then<V>(in queue: DispatchQueue? = nil, _ next: @escaping (U) -> Promise<V>) -> Promise<V> {
@@ -128,12 +122,13 @@ open class Promise<U>: Cancellable {
     
     @discardableResult
     public func onSuccess(in queue: DispatchQueue? = nil, _ closure: @escaping (U) -> Void) -> Promise<U> {
-        if let result = getResultOrRegister(closure, in: queue) {
-            if let queue = queue {
-                queue.async { closure(result) }
-            } else {
-                closure(result)
-            }
+        guard let result = getResultOrRegister(closure, in: queue) else {
+            return self
+        }
+        if let queue = queue {
+            queue.async { closure(result) }
+        } else {
+            closure(result)
         }
         return self
     }
@@ -151,12 +146,13 @@ open class Promise<U>: Cancellable {
     
     @discardableResult
     public func onError(in queue: DispatchQueue? = nil, _ closure: @escaping (Error) -> Void) -> Promise<U> {
-        if let error = getErrorOrRegister(closure, in: queue) {
-            if let queue = queue {
-                queue.async { closure(error) }
-            } else {
-                closure(error)
-            }
+        guard let error = getErrorOrRegister(closure, in: queue) else {
+            return self
+        }
+        if let queue = queue {
+            queue.async { closure(error) }
+        } else {
+            closure(error)
         }
         return self
     }
@@ -174,12 +170,13 @@ open class Promise<U>: Cancellable {
     
     @discardableResult
     public func finally(in queue: DispatchQueue? = nil, _ closure: @escaping () -> Void) -> Promise<U> {
-        if isCompletedOrRegister(closure, in: queue) {
-            if let queue = queue {
-                queue.async { closure() }
-            } else {
-                closure()
-            }
+        if !isCompletedOrRegister(closure, in: queue) {
+            return self
+        }
+        if let queue = queue {
+            queue.async { closure() }
+        } else {
+            closure()
         }
         return self
     }

@@ -27,39 +27,30 @@ class Futures<T> {
     
     func fulfill(with result: T, in promiseQueue: DispatchQueue?) {
         successFutures.forEach { future in
-            if let queue = future.queue ?? promiseQueue {
-                queue.async {
-                    future.closure(result)
-                }
-            } else {
+            let queue = future.queue ?? promiseQueue
+            queue?.async {
                 future.closure(result)
-            }
+            } ?? future.closure(result)
         }
         complete(in: promiseQueue)
     }
     
     func complete(with error: Error, in promiseQueue: DispatchQueue?) {
         errorFutures.forEach { future in
-            if let queue = future.queue ?? promiseQueue {
-                queue.async {
-                    future.closure(error)
-                }
-            } else {
+            let queue = future.queue ?? promiseQueue
+            queue?.async {
                 future.closure(error)
-            }
+            } ?? future.closure(error)
         }
         complete(in: promiseQueue)
     }
     
     private func complete(in promiseQueue: DispatchQueue?) {
         finallyFutures.forEach { future in
-            if let queue = future.queue ?? promiseQueue {
-                queue.async {
-                    future.closure()
-                }
-            } else {
+            let queue = future.queue ?? promiseQueue
+            queue?.async {
                 future.closure()
-            }
+            } ?? future.closure()
         }
     }
 }
