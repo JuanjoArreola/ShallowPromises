@@ -14,7 +14,7 @@ final class ShallowPromisesTests: XCTestCase {
     }
     
     func testError() {
-        let expectation = self.expectation(description: "testSuccess")
+        let expectation = self.expectation(description: "testError")
         
         TestRequester.requestError().onError { error in
             expectation.fulfill()
@@ -24,19 +24,19 @@ final class ShallowPromisesTests: XCTestCase {
     }
     
     func testThen() {
-        let expectation = self.expectation(description: "testSuccess")
-        let firstExpectation = self.expectation(description: "Success")
+        let thenExpectation = self.expectation(description: "testThen")
+        let expectation = self.expectation(description: "test")
         
         TestRequester.request()
             .then({ result -> Promise<Int> in
-                firstExpectation.fulfill()
+                thenExpectation.fulfill()
                 return TestRequester.requestInt(from: result)
             })
-            .onSuccess { result in
+            .onSuccess { _ in
                 expectation.fulfill()
         }
         
-        wait(for: [firstExpectation, expectation], timeout: 1.0)
+        wait(for: [thenExpectation, expectation], timeout: 1.0)
     }
     
     func testManyThen() {
@@ -52,6 +52,28 @@ final class ShallowPromisesTests: XCTestCase {
         
         wait(for: [first], timeout: 1.0)
     }
+    
+    func testReceiverQueue() {
+        let expectation = self.expectation(description: "expectation")
+        
+        TestRequester.requestInt(from: "1").onSuccess(in: .main) { result in
+            print("\(result)")
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 1.0)
+    }
+    
+    func testFulfilled() {
+        let expectation = self.expectation(description: "expectation")
+        
+        TestRequester.requestFulfilled().onSuccess(in: .main) { result in
+            print(result)
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 1.0)
+    }
 
     static var allTests = [
         ("testSuccess", testSuccess),
@@ -60,6 +82,10 @@ final class ShallowPromisesTests: XCTestCase {
 
 
 class TestRequester {
+    
+    static func requestFulfilled() -> Promise<String> {
+        return Promise().fulfill(with: "result")
+    }
     
     static func request() -> Promise<String> {
         let promise = Promise<String>()

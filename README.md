@@ -98,8 +98,8 @@ requestInt(from: "1").onSuccess(in: .main) { result in
 If a queue is not specified:
 
 ```swift
-    requestInt(from: "1").onSuccess { result in
-print("\(result)")
+requestInt(from: "1").onSuccess { result in
+    print("\(result)")
 }
 ```
 then:
