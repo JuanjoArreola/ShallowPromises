@@ -3,121 +3,79 @@ import XCTest
 
 final class ShallowPromisesTests: XCTestCase {
     
-    func testSuccess() {
-        let expectation = self.expectation(description: "testSuccess")
+    func testFulfillTwice() {
+        let expectation = self.expectation(description: "twice")
         
-        TestRequester.request().onSuccess { result in
+        Promise().fulfill(with: 0).fulfill(with: 1).onSuccess { result in
+            XCTAssertEqual(result, 0)
+        }.finally {
             expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 1.0)
     }
     
-    func testError() {
-        let expectation = self.expectation(description: "testError")
+    func testCancelLittlePromise() {
+        let expectation = self.expectation(description: "littlePromise")
         
-        TestRequester.requestError().onError { error in
+        let littlePromise = Promise<Int>()
+        littlePromise.onSuccess { _ in
+            XCTFail()
+        }.onError { error in
+            XCTAssertTrue(error is PromiseFailure)
+        }.finally {
+            expectation.fulfill()
+        }
+        let promise = Promise<Int>(littlePromise: littlePromise)
+        promise.cancel()
+        
+        wait(for: [expectation], timeout: 1.0)
+    }
+    
+    func testCancelledLittlePromise() {
+        let expectation = self.expectation(description: "littlePromise")
+        
+        let littlePromise = Promise<Int>()
+        littlePromise.onSuccess { _ in
+            XCTFail()
+        }.onError { error in
+            XCTAssertTrue(error is PromiseFailure)
+        }.finally {
+            expectation.fulfill()
+        }
+        let promise = Promise<Int>().complete(with: TestError.test)
+        promise.littlePromise = littlePromise
+        
+        wait(for: [expectation], timeout: 1.0)
+    }
+    
+    func testFinally() {
+        let expectation = self.expectation(description: "testFinally")
+        
+        Promise<Int>().fulfill(with: 0, in: .main).finally {
             expectation.fulfill()
         }
         
         wait(for: [expectation], timeout: 1.0)
     }
     
-    func testThen() {
-        let thenExpectation = self.expectation(description: "testThen")
-        let expectation = self.expectation(description: "test")
+    func testInitCompletion() {
+        let expectation = self.expectation(description: "testFinally")
         
-        TestRequester.request()
-            .then({ result -> Promise<Int> in
-                thenExpectation.fulfill()
-                return TestRequester.requestInt(from: result)
-            })
-            .onSuccess { _ in
-                expectation.fulfill()
-        }
-        
-        wait(for: [thenExpectation, expectation], timeout: 1.0)
-    }
-    
-    func testManyThen() {
-        let first = self.expectation(description: "first")
-        
-        TestRequester.request()
-            .then(TestRequester.requestInt(from:))
-            .then(TestRequester.requestString(from:))
-            .then(TestRequester.requestInt(from:))
-            .onSuccess { result in
-                first.fulfill()
-        }
-        
-        wait(for: [first], timeout: 1.0)
-    }
-    
-    func testReceiverQueue() {
-        let expectation = self.expectation(description: "expectation")
-        
-        TestRequester.requestInt(from: "1").onSuccess(in: .main) { result in
-            print("\(result)")
+        Promise(successClosure: { (result: Int) in
             expectation.fulfill()
-        }
-        
-        wait(for: [expectation], timeout: 1.0)
-    }
-    
-    func testFulfilled() {
-        let expectation = self.expectation(description: "expectation")
-        
-        TestRequester.requestFulfilled().onSuccess(in: .main) { result in
-            print(result)
-            expectation.fulfill()
-        }
+            }, queue: .main).fulfill(with: 0)
         
         wait(for: [expectation], timeout: 1.0)
     }
 
     static var allTests = [
-        ("testSuccess", testSuccess),
+        ("testFulfillTwice", testFulfillTwice),
+        ("testCancelLittlePromise", testCancelLittlePromise),
+        ("testCancelledLittlePromise", testCancelledLittlePromise),
+        ("testFinally", testFinally),
+        ("testInitCompletion", testInitCompletion),
     ]
-}
-
-
-class TestRequester {
-    
-    static func requestFulfilled() -> Promise<String> {
-        return Promise().fulfill(with: "result")
-    }
-    
-    static func request() -> Promise<String> {
-        let promise = Promise<String>()
-        DispatchQueue.global().async {
-            promise.fulfill(with: "result")
-        }
-        return promise
-    }
-    
-    static func requestInt(from string: String) -> Promise<Int> {
-        let promise = Promise<Int>()
-        DispatchQueue.global().async {
-            promise.fulfill(with: 1)
-        }
-        return promise
-    }
-    
-    static func requestString(from int: Int) -> Promise<String> {
-        let promise = Promise<String>()
-        DispatchQueue.global().async {
-            promise.fulfill(with: "One")
-        }
-        return promise
-    }
-    
-    static func requestError() -> Promise<String> {
-        let promise = Promise<String>()
-        DispatchQueue.global().async {
-            promise.complete(with: TestError.test)
-        }
-        return promise
-    }
 }
 
 enum TestError: Error {

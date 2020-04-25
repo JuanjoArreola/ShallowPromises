@@ -1,6 +1,7 @@
 # ShallowPromises
 
 [![License](https://img.shields.io/github/license/JuanjoArreola/ShallowPromises)](https://github.com/JuanjoArreola/ShallowPromises/blob/master/LICENSE)
+[![codebeat badge](https://codebeat.co/badges/dfec6e98-fda7-4b28-aa12-6eff10466d29)](https://codebeat.co/projects/github-com-juanjoarreola-shallowpromises-master)
 
 A Promises Library for Swift 5.
 
