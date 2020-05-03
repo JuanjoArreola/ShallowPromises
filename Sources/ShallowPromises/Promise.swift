@@ -24,7 +24,7 @@ open class Promise<U>: Cancellable {
         }
     }
     
-    public init(successClosure: ((U) -> Void)? = nil, queue: DispatchQueue? = nil, littlePromise: Cancellable? = nil) {
+    public required init(successClosure: ((U) -> Void)? = nil, queue: DispatchQueue? = nil, littlePromise: Cancellable? = nil) {
         if let closure = successClosure {
             futures?.appendSuccess(closure, in: queue)
         }
@@ -155,6 +155,13 @@ open class Promise<U>: Cancellable {
             } ?? closure()
         }
         return self
+    }
+    
+    public func proxy(in queue: DispatchQueue? = nil) -> Self {
+        let proxy = Self()
+        onSuccess { proxy.fulfill(with: $0, in: queue) }
+        onError { proxy.complete(with: $0, in: queue) }
+        return proxy
     }
     
     public func cancel() {
